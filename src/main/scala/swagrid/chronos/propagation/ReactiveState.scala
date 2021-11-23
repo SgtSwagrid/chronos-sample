@@ -13,7 +13,7 @@ case class ReactiveState[T, R[_], V[_]] (
   history: History = History(),
   children: Children = Map.empty,
   parents: Children = Map.empty,
-  pullMask: TemporalMask = TemporalMask.empty
+  pullMask: Mask = Mask.empty
 ):
   
   type State = ReactiveState[T, R, V]
@@ -24,29 +24,29 @@ case class ReactiveState[T, R[_], V[_]] (
   def updateParentValues(f: History => History): State =
     copy(history = f(history))
   
-  def updateChild(child: Contact[_, _])(f: TemporalMask => TemporalMask): State =
+  def updateChild(child: Contact[_, _])(f: Mask => Mask): State =
     copy(children = children + (child ->
-      f(children.getOrElse(child, TemporalMask.empty))
+      f(children.getOrElse(child, Mask.empty))
     ))
     
-  def updateChildren(f: TemporalMask => TemporalMask): State =
+  def updateChildren(f: Mask => Mask): State =
     copy(children = children.map((c, m) => (c, f(m))))
     
-  def updateParent(parent: Contact[_, _])(f: TemporalMask => TemporalMask): State =
+  def updateParent(parent: Contact[_, _])(f: Mask => Mask): State =
     copy(parents = parents + (parent ->
-      f(parents.getOrElse(parent, TemporalMask.empty))
+      f(parents.getOrElse(parent, Mask.empty))
     ))
   
-  def updateParents(f: TemporalMask => TemporalMask): State =
+  def updateParents(f: Mask => Mask): State =
     copy(parents = parents.map((p, m) => (p, f(m))))
     
-  def updatePullMask(f: TemporalMask => TemporalMask): State =
+  def updatePullMask(f: Mask => Mask): State =
     copy(pullMask = f(pullMask))
 
 object ReactiveState:
   
   type SignalState[T] = ReactiveState[T, Signal, SignalValue]
   type EventState[T] = ReactiveState[T, Event, EventValue]
-  type Children = Map[Contact[_, _], TemporalMask]
+  type Children = Map[Contact[_, _], Mask]
   
   case class Contact[T, R[_]](reactive: R[T], actor: ActorRef[Message])

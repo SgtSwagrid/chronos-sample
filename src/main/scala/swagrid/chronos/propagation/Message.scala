@@ -12,7 +12,7 @@ object Message:
   
   case class Subscribe (
     subscriber: Contact[_, _],
-    mask: TemporalMask
+    mask: Mask
   ) extends Message
   
   case class PushSignal[T] (
@@ -26,5 +26,5 @@ object Message:
   ) extends Message
   
   case class Pull (
-    mask: TemporalMask
+    mask: Mask
   ) extends Message

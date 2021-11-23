@@ -12,7 +12,7 @@ sealed trait Signal[+A] extends Reactive:
   def changed: Event[A] = Event.Changed(this)
   
   def update(history: History): SignalValue[_ <: A]
-  def parents(history: History): Map[Reactive, TemporalMask]
+  def parents(history: History): Map[Reactive, Mask]
 
 object Signal:
   
@@ -25,8 +25,8 @@ object Signal:
       a <- history.signalValue(fa)
     yield f(a)
     
-    def parents(history: History): Map[Reactive, TemporalMask] =
-      Map(ff -> TemporalMask.all, fa -> TemporalMask.all)
+    def parents(history: History): Map[Reactive, Mask] =
+      Map(ff -> Mask.all, fa -> Mask.all)
     
   case class Switched[A, B](fa: Signal[A], f: A => Signal[B]) extends Signal[B]:
     
@@ -35,33 +35,33 @@ object Signal:
       fa <- history.signalValue(f(a))
     yield fa
   
-    def parents(history: History): Map[Reactive, TemporalMask] =
+    def parents(history: History): Map[Reactive, Mask] =
       history.signalValue(fa).separate
-        .asInstanceOf[Map[Reactive, TemporalMask]]
-        + (fa -> TemporalMask.all)
+        .asInstanceOf[Map[Reactive, Mask]]
+        + (fa -> Mask.all)
     
   case class Held[A](parent: Event[A], initial: A) extends Signal[A]:
     
     def update(history: History): SignalValue[A] =
-      history.eventValue(parent).hold
+      history.eventValue(parent).intervals
   
-    def parents(history: History): Map[Reactive, TemporalMask] =
-      Map(parent -> TemporalMask.all)
+    def parents(history: History): Map[Reactive, Mask] =
+      Map(parent -> Mask.all)
   
   case class Sampled[A](parent: Signal[A], freq: Int) extends Signal[A]:
     
     def update(history: History): SignalValue[A] =
       history.signalValue(parent).quantise(freq)
   
-    def parents(history: History): Map[Reactive, TemporalMask] =
-      Map(parent -> TemporalMask.all)
+    def parents(history: History): Map[Reactive, Mask] =
+      Map(parent -> Mask.all)
     
   case class Constant[A](x: A) extends Signal[A]:
     
     def update(history: History): SignalValue[A] =
       SignalValue.constant(x)
   
-    def parents(history: History): Map[Reactive, TemporalMask] =
+    def parents(history: History): Map[Reactive, Mask] =
       Map()
   
   given Monad[Signal] with

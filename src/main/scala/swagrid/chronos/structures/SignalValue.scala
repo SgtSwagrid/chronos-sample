@@ -1,18 +1,14 @@
 package swagrid.chronos.structures
 
 import scala.collection.immutable.{TreeMap, TreeSet}
-
 import cats.*
-
 import swagrid.chronos.structures.SignalValue.*
 
 class SignalValue[+T] private[structures]
   (val history: TreeMap[Period, T]):
 
-  def combine[U](that: SignalValue[U]): SignalValue[T | U] =
+  def + [U](that: SignalValue[U]): SignalValue[T | U] =
     new SignalValue(consolidate(history ++ that.history))
-  
-  def + [U](that: SignalValue[U]): SignalValue[T | U] = combine(that)
   
   def crop(period: Period): SignalValue[T] =
     val h = history
@@ -20,20 +16,18 @@ class SignalValue[+T] private[structures]
       .rangeTo(Period.instant(period.end))
     new SignalValue(h.flatMap((p, x) => p.intersect(period).map(_ -> x)))
     
-  def crop(mask: TemporalMask): SignalValue[T] =
-    mask.periods.unsorted.map(crop).reduce(_ combine _)
+  def crop(mask: Mask): SignalValue[T] =
+    mask.periods.unsorted.map(crop).fold(SignalValue.unknown)(_ + _)
     
   def flatMap[U](f: T => SignalValue[U]): SignalValue[U] =
     val h = history.flatMap((p0, x0) => f(x0).crop(p0).history)
     new SignalValue(consolidate(h))
   
-  def mask: TemporalMask =
-    TemporalMask(history.keySet.toSeq*)
+  def mask: Mask =
+    Mask(history.keySet.toSeq*)
     
-  def apply(t: Endpoint): Option[T] = history
-    .rangeFrom(Period.instant(t))
-    .rangeTo(Period.instant(t))
-    .values.headOption
+  def apply(t: Timestamp): Option[T] =
+    crop(Period.instant(t)).history.headOption.map((_, x) => x)
     
   def quantise(freq: Int): SignalValue[T] =
     val h = history.flatMap((p, x) => p.quantise(freq).map(_ -> x))
@@ -41,8 +35,8 @@ class SignalValue[+T] private[structures]
     
   def fill[U](value: U): SignalValue[T | U] =
     
-    val start = Period.instant(Endpoint.NegativeInfinity)
-    val end = Period.instant(Endpoint.PositiveInfinity)
+    val start = Period.instant(Timestamp.Genesis)
+    val end = Period.instant(Timestamp.Infinity)
     val periods = start +: history.keySet.toSeq :+ end
     
     val gaps = periods.sliding(2).map(p => (p(0), p(1)))
@@ -52,11 +46,15 @@ class SignalValue[+T] private[structures]
     new SignalValue(history ++ gaps.map(_ -> value))
     
   def changes: EventValue[T] =
-    new EventValue(new SignalValue(history.map((p, x) => p -> (p.start, x))))
+    val h = TreeMap.from(history.toSeq.sliding(2).flatMap {
+      case Seq((p0, x0), (p1, x1)) =>
+        Option.when(p0.end.adjacent(p1.start))(p1.start -> Seq(x1))
+    })
+    new EventValue(h, mask.trimLeft)
     
-  def separate: Map[_ <: T, TemporalMask] =
+  def separate: Map[_ <: T, Mask] =
     history.values.toSet.map { x0 =>
-      x0 -> TemporalMask(history.filter((_, x1) => x0 == x1).keys.toSeq*)
+      x0 -> Mask(history.filter((_, x1) => x0 == x1).keys.toSeq*)
     }.toMap
     
   def isEmpty: Boolean = history.isEmpty
@@ -72,7 +70,7 @@ object SignalValue:
   def constant[T](x: T): SignalValue[T] =
     SignalValue(Period.all -> x)
     
-  def empty: SignalValue[Nothing] =
+  def unknown: SignalValue[Nothing] =
     SignalValue()
   
   private def consolidate[T](history: TreeMap[Period, T]): TreeMap[Period, T] =
@@ -89,11 +87,15 @@ object SignalValue:
       val p = same.keySet.fold(p0)(_ span _)
       h -- same.keySet + (p -> x0)
     }
-    
+  
+  extension[T] (sv: SignalValue[EventValue[T]])
+    def flattenEvent: EventValue[T] =
+      sv.history.map((p, ev) => ev.crop(p)).fold(EventValue.unknown)(_ + _)
+  
   extension[T] (sv: SignalValue[Option[T]])
     def flattenOption: SignalValue[T] = sv.flatMap {
       case Some(x) => constant(x)
-      case None => empty
+      case None => unknown
     }
     
   given Monad[SignalValue] with
@@ -102,5 +104,5 @@ object SignalValue:
     def tailRecM[A, B](a: A)(f: A => SignalValue[Either[A, B]]): SignalValue[B] = { ??? }
     
   given MonoidK[SignalValue] with
-    def empty[A]: SignalValue[Nothing] = SignalValue.empty
-    def combineK[A](x: SignalValue[A], y: SignalValue[A]): SignalValue[A] = x.combine(y)
+    def empty[A]: SignalValue[Nothing] = SignalValue.unknown
+    def combineK[A](x: SignalValue[A], y: SignalValue[A]): SignalValue[A] = x + y

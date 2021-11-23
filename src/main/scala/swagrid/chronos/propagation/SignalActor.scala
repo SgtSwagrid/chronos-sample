@@ -11,7 +11,7 @@ import swagrid.chronos.propagation.ReactiveState.*
 object SignalActor:
   
   def apply[T](signal: Signal[T]): Behavior[Message] =
-    signalBehavior(signal, ReactiveState(SignalValue.empty))
+    signalBehavior(signal, ReactiveState(SignalValue.unknown))
   
   private def signalBehavior[T](signal: Signal[T], state: SignalState[T]): Behavior[Message] =
     
@@ -62,6 +62,7 @@ object SignalActor:
     val givens = state.history.updateSignal(self.reactive, state.value)
     val updated = self.reactive.update(givens)
     val diff = updated.crop(!state.value.mask)
+    val safeToRemove = updated.mask.trimLeft & state.value.mask
   
     state.children.foreach { (child, mask) =>
       val update = diff.crop(mask)
@@ -71,6 +72,6 @@ object SignalActor:
     
     state
       .updateValue(_ => updated)
-      .updateParentValues(_.crop(!updated.mask))
+      .updateParentValues(_.crop(!safeToRemove))
       .updateChildren(m => m - diff.mask)
       .updatePullMask(m => m & updated.mask)

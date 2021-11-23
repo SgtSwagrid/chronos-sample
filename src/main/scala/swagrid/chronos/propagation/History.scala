@@ -9,20 +9,20 @@ case class History (
 ):
   
   def signalValue[T](signal: Signal[T]): SignalValue[T] =
-    signals.get(signal).map(_.asInstanceOf[SignalValue[T]]).getOrElse(SignalValue.empty)
+    signals.get(signal).map(_.asInstanceOf[SignalValue[T]]).getOrElse(SignalValue.unknown)
   
   def eventValue[T](event: Event[T]): EventValue[T] =
     events.get(event).map(_.asInstanceOf[EventValue[T]]).getOrElse(EventValue.empty)
   
   def updateSignal[T, R[_], V[_]](signal: Signal[T], update: SignalValue[T]): History =
-    val updated = (Some(update) ++ signals.get(signal)).reduce(_ combine _)
+    val updated = (Some(update) ++ signals.get(signal)).reduce(_ + _)
     copy(signals = signals + (signal -> updated))
   
   def updateEvent[T](event: Event[T], update: EventValue[T]): History =
-    val updated = (Some(update) ++ events.get(event)).reduce(_ combine _)
+    val updated = (Some(update) ++ events.get(event)).reduce(_ + _)
     copy(events = events + (event -> updated))
   
-  def crop(mask: TemporalMask): History = copy (
+  def crop(mask: Mask): History = copy (
     signals = signals.map((s, sv) => (s, sv.crop(mask))),
     events = events.map((e, ev) => (e, ev.crop(mask)))
   )
