@@ -1,6 +1,7 @@
 package swagrid.chronos.tests
 
 import cats.implicits.*
+
 import swagrid.chronos.structures.*
 import swagrid.chronos.structures.Timestamp.*
 
@@ -17,5 +18,7 @@ import swagrid.chronos.structures.Timestamp.*
   )(Mask(Inclusive(2) ~> LeftOf(6)))
   
   println(e1 + e2)
+  println((e1 + e2).map(_.toUpperCase))
+  println((e1 + e2).filter(_.length <= 5))
   println((e1 + e2).intervals)
   println(e1 merge e2)

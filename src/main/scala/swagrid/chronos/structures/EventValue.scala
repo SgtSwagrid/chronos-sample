@@ -8,7 +8,7 @@ import cats.implicits.*
 class EventValue[+T] private[structures]
     (val history: TreeMap[Timestamp, Seq[T]], val mask: Mask):
   
-  def + [U](that: EventValue[U]): EventValue[T | U] =
+  def + [U](that: EventValue[U]): EventValue[T|U] =
     
     val compatible = (history.keySet & that.history.keySet)
       .forall(t => history(t) == that.history(t))
@@ -17,12 +17,12 @@ class EventValue[+T] private[structures]
     
     new EventValue(history ++ that.history, mask | that.mask)
     
-  def merge[U](that: EventValue[U]): EventValue[T | U] =
+  def merge[U](that: EventValue[U]): EventValue[T|U] =
     
     val tn = (history.keySet | that.history.keySet).unsorted
     val merged = tn.map { t => t ->
       (history.get(t) ++ that.history.get(t)).flatten.toSeq
-        .asInstanceOf[Seq[T | U]]
+        .asInstanceOf[Seq[T|U]]
     }
   
     new EventValue(TreeMap.from(merged), mask & that.mask)
@@ -35,6 +35,10 @@ class EventValue[+T] private[structures]
   def crop(mask: Mask): EventValue[T] =
     mask.periods.unsorted.map(crop).fold(EventValue.unknown)(_ + _)
     
+  def map[U](f: T => U): EventValue[U] =
+    val h = history.map((t, e) => t -> e.map(f))
+    new EventValue(h, mask)
+  
   def flatMap[U](f: T => EventValue[U]): EventValue[U] =
     intervals.map(f).flattenEvent
   
@@ -64,14 +68,14 @@ class EventValue[+T] private[structures]
     }
     new EventValue(h, mask & signal.mask)
     
-  def accumulate[U, V](source: EventValue[V])(f: (T | U, V) => U): EventValue[T | U] =
+  def accumulate[U, V](source: EventValue[V])(f: (T|U, V) => U): EventValue[T|U] =
     
     val parts = for
       p0 <- mask.periods.filter(p => !crop(p).isEmpty).toSeq
       p1 <- source.crop(!mask).mask.periods.find(p1 => p0.end.adjacent(p1.start))
     yield
       val e0 = crop(p0).history.values.last.last
-      val values: Iterable[T | U] =
+      val values: Iterable[T|U] =
         source.crop(p1).history.values.flatten.scanLeft(e0)(f).tail
       val times = source.crop(p1).history.flatMap((t, e) => Seq.fill(e.size)(t))
       EventValue((times zip values).toSeq*)(p1.mask)
@@ -102,8 +106,8 @@ object EventValue:
   def unknown: EventValue[Nothing] =
     new EventValue(TreeMap(), Mask.empty)
     
-  given Monad[EventValue] with
-    def pure[A](x: A): EventValue[A] = genesis(x)
+  given FlatMap[EventValue] with
+    def map[A, B](fa: EventValue[A])(f: A => B): EventValue[B] = fa.map(f)
     def flatMap[A, B](fa: EventValue[A])(f: A => EventValue[B]): EventValue[B] = fa.flatMap(f)
     def tailRecM[A, B](a: A)(f: A => EventValue[Either[A, B]]): EventValue[B] = { ??? }
   

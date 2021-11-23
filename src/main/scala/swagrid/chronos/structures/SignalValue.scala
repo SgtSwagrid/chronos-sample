@@ -7,7 +7,7 @@ import swagrid.chronos.structures.SignalValue.*
 class SignalValue[+T] private[structures]
   (val history: TreeMap[Period, T]):
 
-  def + [U](that: SignalValue[U]): SignalValue[T | U] =
+  def + [U](that: SignalValue[U]): SignalValue[T|U] =
     new SignalValue(consolidate(history ++ that.history))
   
   def crop(period: Period): SignalValue[T] =
